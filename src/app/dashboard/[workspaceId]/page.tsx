@@ -321,6 +321,21 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
           })
         }
       )
+      .on(
+        'postgres_changes',
+        {
+          event: 'DELETE',
+          schema: 'public',
+          table: 'discord_messages',
+          filter: `workspace_id=eq.${workspaceId}`,
+        },
+        (payload) => {
+          const deleted = payload.old as Record<string, unknown>
+          if (deleted?.id) {
+            setRealtimeMessages((prev) => prev.filter((m) => m.id !== deleted.id))
+          }
+        }
+      )
       .subscribe()
 
     return () => {
@@ -340,14 +355,19 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
         })
         if (!res.ok) return
         const { messages: fresh } = await res.json()
-        if (!fresh || fresh.length === 0) return
+        if (!fresh) return
         setRealtimeMessages((prev) => {
-          const existingIds = new Set(prev.map((m) => m.id))
+          const freshIds = new Set((fresh as Array<{ id: string }>).map((m) => m.id))
+          // Remove messages that no longer exist on the server (deleted by admin)
+          // but keep optimistic messages that haven't been confirmed yet
+          const surviving = prev.filter((m) => m.id.startsWith('opt-') || freshIds.has(m.id))
+          const existingIds = new Set(surviving.map((m) => m.id))
           // Also track optimistic messages by content fingerprint
           const optimisticFingerprints = new Set(
-            prev.filter((m) => m.id.startsWith('opt-')).map((m) => `${m.author_username}:${m.content}`)
+            surviving.filter((m) => m.id.startsWith('opt-')).map((m) => `${m.author_username}:${m.content}`)
           )
-          let changed = false
+          let changed = surviving.length !== prev.length
+          let result = surviving
           const additions: typeof prev = []
           for (const m of fresh) {
             if (existingIds.has(m.id)) continue
@@ -355,10 +375,10 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
             const fp = `${m.author_username}:${m.content}`
             if (optimisticFingerprints.has(fp)) {
               // Replace the optimistic one with the real one
-              const optIdx = prev.findIndex((p) => p.id.startsWith('opt-') && `${p.author_username}:${p.content}` === fp)
+              const optIdx = result.findIndex((p) => p.id.startsWith('opt-') && `${p.author_username}:${p.content}` === fp)
               if (optIdx >= 0) {
-                prev = [...prev]
-                prev[optIdx] = m
+                result = [...result]
+                result[optIdx] = m
                 changed = true
                 continue
               }
@@ -367,7 +387,7 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
             changed = true
           }
           if (!changed && additions.length === 0) return prev
-          const merged = [...(changed ? prev : prev), ...additions]
+          const merged = [...result, ...additions]
             .sort((a, b) => new Date(b.sent_at).getTime() - new Date(a.sent_at).getTime())
           return merged
         })
@@ -417,6 +437,7 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
   const [aiRetryCountdown, setAiRetryCountdown] = useState(0)
   const [commitSummary, setCommitSummary] = useState<{ summary: string; highlights: string[]; authorBreakdown: Record<string, string>; taskProgress: Array<{ taskId: string; taskTitle: string; status: 'addressed' | 'partially-addressed' | 'not-addressed'; evidence: string }>; completionPercent: number; workInsight: string } | null>(null)
   const [commitSummarizing, setCommitSummarizing] = useState(false)
+  const [commitFilter, setCommitFilter] = useState<string>('all')
 
   // Derive admin status from members data
   const isAdmin = data?.members?.some((m) => m.user?.id === user?.id && m.role === 'admin') ?? false
@@ -1093,9 +1114,26 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
           <Card className="py-0 shadow-sm border-border/50 overflow-hidden">
             <CardContent className="p-0">
             <div className="px-5 py-4 border-b border-border flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-semibold text-foreground">Recent Commits</h2>
-                <p className="text-xs text-muted-foreground mt-0.5">{data.recentCommits.length} commits ingested via GitHub webhook</p>
+              <div className="flex items-center gap-4">
+                <div>
+                  <h2 className="text-sm font-semibold text-foreground">Recent Commits</h2>
+                  <p className="text-xs text-muted-foreground mt-0.5">{commitFilter === 'all' ? data.recentCommits.length : data.recentCommits.filter((c) => c.author_github_username === commitFilter).length} commits {commitFilter !== 'all' ? `by ${commitFilter}` : 'ingested via GitHub webhook'}</p>
+                </div>
+                {data.recentCommits.length > 0 && (() => {
+                  const authors = Array.from(new Set(data.recentCommits.map((c) => c.author_github_username).filter(Boolean))) as string[]
+                  return authors.length > 1 ? (
+                    <select
+                      value={commitFilter}
+                      onChange={(e) => { setCommitFilter(e.target.value); setCommitsPage(0) }}
+                      className="px-3 py-1.5 text-xs bg-background border border-border rounded-lg text-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                    >
+                      <option value="all">All Contributors</option>
+                      {authors.sort().map((a) => (
+                        <option key={a} value={a}>{a}</option>
+                      ))}
+                    </select>
+                  ) : null
+                })()}
               </div>
               {data.recentCommits.length > 0 && (
                 <button
@@ -1222,60 +1260,65 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
                 <p className="text-xs text-muted-foreground mt-1">Configure a GitHub webhook to start ingesting commits.</p>
               </div>
             ) : (
-              <>
-                <div className="divide-y divide-border">
-                  {data.recentCommits.slice(commitsPage * PAGE_SIZE, (commitsPage + 1) * PAGE_SIZE).map((c, i) => (
-                    <div key={i} className="px-5 py-3.5 flex items-center gap-4 hover:bg-muted/30 transition-colors">
-                      <div className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${TYPE_COLORS[c.commit_type ?? 'chore'] ?? TYPE_COLORS.chore}`}>
-                        {c.commit_type ?? 'chore'}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          {c.author_avatar ? (
-                            <Avatar className="size-5">
-                              <AvatarImage src={c.author_avatar} />
-                              <AvatarFallback className="text-[9px]">{(c.author_github_username ?? '?').charAt(0).toUpperCase()}</AvatarFallback>
-                            </Avatar>
-                          ) : (
-                            <Avatar className="size-5">
-                              <AvatarFallback className="text-[9px] bg-primary/20 text-primary">{(c.author_github_username ?? '?').charAt(0).toUpperCase()}</AvatarFallback>
-                            </Avatar>
+              (() => {
+                const filteredCommits = commitFilter === 'all' ? data.recentCommits : data.recentCommits.filter((c) => c.author_github_username === commitFilter)
+                return (
+                  <>
+                    <div className="divide-y divide-border">
+                      {filteredCommits.slice(commitsPage * PAGE_SIZE, (commitsPage + 1) * PAGE_SIZE).map((c, i) => (
+                        <div key={i} className="px-5 py-3.5 flex items-center gap-4 hover:bg-muted/30 transition-colors">
+                          <div className={`text-[10px] px-2 py-0.5 rounded-full font-medium shrink-0 ${TYPE_COLORS[c.commit_type ?? 'chore'] ?? TYPE_COLORS.chore}`}>
+                            {c.commit_type ?? 'chore'}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2">
+                              {c.author_avatar ? (
+                                <Avatar className="size-5">
+                                  <AvatarImage src={c.author_avatar} />
+                                  <AvatarFallback className="text-[9px]">{(c.author_github_username ?? '?').charAt(0).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                              ) : (
+                                <Avatar className="size-5">
+                                  <AvatarFallback className="text-[9px] bg-primary/20 text-primary">{(c.author_github_username ?? '?').charAt(0).toUpperCase()}</AvatarFallback>
+                                </Avatar>
+                              )}
+                              <span className="text-xs font-medium text-foreground">{c.author_github_username ?? 'unknown'}</span>
+                            </div>
+                            {c.message && (
+                              <p className="text-xs text-muted-foreground mt-1 truncate ml-7">{c.message.split('\n')[0]}</p>
+                            )}
+                          </div>
+                          {(c.lines_added > 0 || c.lines_deleted > 0) && (
+                            <>
+                              <div className="text-xs text-emerald-400">+{c.lines_added}</div>
+                              <div className="text-xs text-red-400">-{c.lines_deleted}</div>
+                            </>
                           )}
-                          <span className="text-xs font-medium text-foreground">{c.author_github_username ?? 'unknown'}</span>
+                          <div className="text-xs text-muted-foreground shrink-0">
+                            {formatDistanceToNow(new Date(c.committed_at), { addSuffix: true })}
+                          </div>
                         </div>
-                        {c.message && (
-                          <p className="text-xs text-muted-foreground mt-1 truncate ml-7">{c.message.split('\n')[0]}</p>
-                        )}
-                      </div>
-                      {(c.lines_added > 0 || c.lines_deleted > 0) && (
-                        <>
-                          <div className="text-xs text-emerald-400">+{c.lines_added}</div>
-                          <div className="text-xs text-red-400">-{c.lines_deleted}</div>
-                        </>
-                      )}
-                      <div className="text-xs text-muted-foreground shrink-0">
-                        {formatDistanceToNow(new Date(c.committed_at), { addSuffix: true })}
-                      </div>
+                      ))}
                     </div>
-                  ))}
-                </div>
-                {data.recentCommits.length > PAGE_SIZE && (
-                  <div className="px-5 py-3 border-t border-border flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">
-                      {commitsPage * PAGE_SIZE + 1}-{Math.min((commitsPage + 1) * PAGE_SIZE, data.recentCommits.length)} of {data.recentCommits.length}
-                    </span>
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon-sm" onClick={() => setCommitsPage(Math.max(0, commitsPage - 1))} disabled={commitsPage === 0}>
-                        <ChevronLeft className="size-4" />
-                      </Button>
-                      <Button variant="ghost" size="icon-sm" onClick={() => setCommitsPage(Math.min(Math.ceil(data.recentCommits.length / PAGE_SIZE) - 1, commitsPage + 1))}
-                        disabled={(commitsPage + 1) * PAGE_SIZE >= data.recentCommits.length}>
-                        <ChevronRight className="size-4" />
-                      </Button>
-                    </div>
-                  </div>
-                )}
-              </>
+                    {filteredCommits.length > PAGE_SIZE && (
+                      <div className="px-5 py-3 border-t border-border flex items-center justify-between">
+                        <span className="text-xs text-muted-foreground">
+                          {commitsPage * PAGE_SIZE + 1}-{Math.min((commitsPage + 1) * PAGE_SIZE, filteredCommits.length)} of {filteredCommits.length}
+                        </span>
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="icon-sm" onClick={() => setCommitsPage(Math.max(0, commitsPage - 1))} disabled={commitsPage === 0}>
+                            <ChevronLeft className="size-4" />
+                          </Button>
+                          <Button variant="ghost" size="icon-sm" onClick={() => setCommitsPage(Math.min(Math.ceil(filteredCommits.length / PAGE_SIZE) - 1, commitsPage + 1))}
+                            disabled={(commitsPage + 1) * PAGE_SIZE >= filteredCommits.length}>
+                            <ChevronRight className="size-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )
+              })()
             )}
             </CardContent>
           </Card>
