@@ -966,32 +966,57 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
                   const typeCounts: Record<string, number> = {}
                   data.recentCommits.forEach((c) => { typeCounts[c.commit_type ?? 'chore'] = (typeCounts[c.commit_type ?? 'chore'] || 0) + 1 })
                   const sorted = Object.entries(typeCounts).sort((a, b) => b[1] - a[1])
-                  const barColors = ['#404040','#525252','#666666','#737373','#808080','#8c8c8c','#999999','#a6a6a6','#b3b3b3']
+                  const typeColorMap: Record<string, string> = {
+                    feat: '#34d399', fix: '#f87171', refactor: '#a78bfa', docs: '#60a5fa',
+                    test: '#22d3ee', chore: '#a1a1aa', style: '#f472b6', perf: '#fb923c',
+                    ci: '#facc15', security: '#ef4444', deploy: '#818cf8', other: '#6b7280',
+                  }
+                  const total = data.recentCommits.length
                   return (
-                    <div className="h-[140px]">
-                      <ChartBar
-                        data={{
-                          labels: sorted.map(([t]) => t),
-                          datasets: [{
-                            label: 'Commits',
-                            data: sorted.map(([, c]) => c),
-                            backgroundColor: sorted.map((_, i) => barColors[i % barColors.length] + '99'),
-                            borderColor: sorted.map((_, i) => barColors[i % barColors.length]),
-                            borderWidth: 1,
-                            borderRadius: 4,
-                            maxBarThickness: 28,
-                          }],
-                        }}
-                        options={{
-                          responsive: true,
-                          maintainAspectRatio: false,
-                          plugins: { legend: { display: false } },
-                          scales: {
-                            x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))', font: { size: 11 } } },
-                            y: { display: false },
-                          },
-                        }}
-                      />
+                    <div>
+                      <div className="h-[180px]">
+                        <ChartBar
+                          data={{
+                            labels: sorted.map(([t]) => t),
+                            datasets: [{
+                              label: 'Commits',
+                              data: sorted.map(([, c]) => c),
+                              backgroundColor: sorted.map(([t]) => (typeColorMap[t] ?? '#6b7280') + 'cc'),
+                              borderColor: sorted.map(([t]) => typeColorMap[t] ?? '#6b7280'),
+                              borderWidth: 1.5,
+                              borderRadius: 6,
+                              maxBarThickness: 36,
+                            }],
+                          }}
+                          options={{
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            plugins: {
+                              legend: { display: false },
+                              tooltip: {
+                                callbacks: {
+                                  label: ((ctx: { parsed: { y: number } }) => `${ctx.parsed.y} commit${ctx.parsed.y !== 1 ? 's' : ''} (${Math.round((ctx.parsed.y / total) * 100)}%)`) as never,
+                                },
+                              },
+                            },
+                            scales: {
+                              x: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))', font: { size: 11, weight: 500 } } },
+                              y: { grid: { color: 'hsl(var(--border))' }, ticks: { color: 'hsl(var(--muted-foreground))', font: { size: 10 }, stepSize: 1 } },
+                            },
+                          }}
+                        />
+                      </div>
+                      {/* Legend */}
+                      <div className="flex flex-wrap gap-x-4 gap-y-1.5 mt-3 pt-3 border-t border-border">
+                        {sorted.map(([type, count]) => (
+                          <div key={type} className="flex items-center gap-1.5">
+                            <span className="w-2.5 h-2.5 rounded-sm shrink-0" style={{ backgroundColor: typeColorMap[type] ?? '#6b7280' }} />
+                            <span className="text-[10px] text-muted-foreground">
+                              <span className="font-medium text-foreground">{type}</span> — {count} ({Math.round((count / total) * 100)}%)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
                     </div>
                   )
                 })()}
@@ -1913,26 +1938,58 @@ export default function WorkspaceDashboard({ params }: { params: Promise<{ works
                   <Card className="py-0 shadow-sm border-border/50">
                     <CardContent className="p-5">
                     <p className="text-xs text-muted-foreground font-medium uppercase tracking-wide mb-4">Commit Distribution</p>
-                    <div style={{ height: Math.max(180, data.teamStats.slice(0, 15).length * 36) }}>
+                    <div style={{ height: Math.max(200, data.teamStats.slice(0, 15).length * 40) }}>
                       <ChartBar
                         data={{
                           labels: data.teamStats.slice(0, 15).map((t) => t.username),
                           datasets: [
-                            { label: 'Commits', data: data.teamStats.slice(0, 15).map((t) => t.commits), backgroundColor: 'rgba(64,64,64,0.7)', borderColor: '#404040', borderWidth: 1, borderRadius: 4 },
-                            { label: 'PRs Opened', data: data.teamStats.slice(0, 15).map((t) => t.prsOpened), backgroundColor: 'rgba(163,163,163,0.7)', borderColor: '#a3a3a3', borderWidth: 1, borderRadius: 4 },
+                            { label: 'Commits', data: data.teamStats.slice(0, 15).map((t) => t.commits), backgroundColor: 'rgba(52,211,153,0.7)', borderColor: '#34d399', borderWidth: 1.5, borderRadius: 6 },
+                            { label: 'PRs Opened', data: data.teamStats.slice(0, 15).map((t) => t.prsOpened), backgroundColor: 'rgba(96,165,250,0.7)', borderColor: '#60a5fa', borderWidth: 1.5, borderRadius: 6 },
                           ],
                         }}
                         options={{
                           responsive: true,
                           maintainAspectRatio: false,
                           indexAxis: 'y' as const,
-                          plugins: { legend: { display: true, position: 'bottom' as const, labels: { boxWidth: 8, usePointStyle: true, pointStyle: 'circle', padding: 16, color: 'hsl(var(--muted-foreground))', font: { size: 10 } } } },
+                          plugins: {
+                            legend: {
+                              display: true,
+                              position: 'bottom' as const,
+                              labels: {
+                                boxWidth: 12,
+                                boxHeight: 12,
+                                usePointStyle: true,
+                                pointStyle: 'rectRounded',
+                                padding: 20,
+                                color: 'hsl(var(--foreground))',
+                                font: { size: 11, weight: 500 },
+                              },
+                            },
+                            tooltip: {
+                              callbacks: {
+                                label: ((ctx: { dataset: { label: string }; parsed: { x: number } }) => ` ${ctx.dataset.label}: ${ctx.parsed.x}`) as never,
+                              },
+                            },
+                          },
                           scales: {
                             x: { grid: { color: 'hsl(var(--border))' }, ticks: { color: 'hsl(var(--muted-foreground))', font: { size: 10 } } },
-                            y: { grid: { display: false }, ticks: { color: 'hsl(var(--muted-foreground))', font: { size: 10 } } },
+                            y: { grid: { display: false }, ticks: { color: 'hsl(var(--foreground))', font: { size: 11, weight: 500 } } },
                           },
                         }}
                       />
+                    </div>
+                    {/* Summary legend */}
+                    <div className="flex items-center gap-6 mt-3 pt-3 border-t border-border">
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-sm bg-emerald-400" />
+                        <span className="text-[11px] text-foreground font-medium">Commits</span>
+                        <span className="text-[10px] text-muted-foreground">({data.teamStats.slice(0, 15).reduce((s, t) => s + t.commits, 0)} total)</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span className="w-3 h-3 rounded-sm bg-blue-400" />
+                        <span className="text-[11px] text-foreground font-medium">PRs Opened</span>
+                        <span className="text-[10px] text-muted-foreground">({data.teamStats.slice(0, 15).reduce((s, t) => s + t.prsOpened, 0)} total)</span>
+                      </div>
                     </div>
                     </CardContent>
                   </Card>
