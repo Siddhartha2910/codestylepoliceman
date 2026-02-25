@@ -1,36 +1,203 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Code Style Policeman
 
-## Getting Started
+**Code Style Policeman** is a real-time project command center designed for student development teams, hackathons, and collaborative software projects. It integrates version control, team communication, semantic code analysis, and AI-powered insights into a unified dashboard to monitor project health, team productivity, and knowledge distribution.
 
-First, run the development server:
+The platform connects directly with GitHub repositories to provide actionable insights, automated alerts, and intelligent project analysis.
 
+---
+
+## Deployment
+
+**Application:**  
+https://codestylepoliceman-theta.vercel.app/
+
+---
+
+## Overview
+
+Modern development teams often struggle to track project health, identify blockers early, and understand knowledge distribution across contributors. Code Style Policeman solves this problem by combining real-time GitHub data, communication analysis, and AI insights into a single centralized dashboard.
+
+The system automatically tracks commits, pull requests, issues, contributor activity, workflow efficiency, and communication patterns to generate a comprehensive health score and actionable recommendations.
+
+---
+
+## Key Features
+
+### GitHub Integration
+- OAuth-based repository access
+- Automatic webhook registration
+- Real-time tracking of commits, pull requests, issues, branches, and deployments
+- Historical repository data synchronization
+- File-level authorship tracking
+
+### Semantic Code Analysis
+- Automatic classification of commits into categories such as feature, fix, refactor, docs, test, and more
+- Risk detection based on code changes
+- Impact scoring based on file importance
+- Commit summaries and development insights
+
+### Project Health Monitoring
+- Composite health score based on:
+  - Commit velocity
+  - Pull request throughput
+  - Issue resolution rate
+  - Contributor activity distribution
+  - Team collaboration patterns
+- Health trends visualization
+
+### Flow Metrics Tracking
+- Cycle time analysis
+- Work-in-progress tracking per contributor
+- Review and deployment time tracking
+- Productivity trend monitoring
+
+### Knowledge Distribution Analysis
+- Bus factor calculation
+- File ownership tracking
+- Contributor knowledge graph visualization
+- Risk identification from knowledge concentration
+
+### Communication Analysis
+- Message intent detection (blockers, progress updates, task claims, questions)
+- Automatic blocker detection and alert generation
+- Unified communication dashboard
+
+### AI-Powered Insights
+- Automated project analysis and summaries
+- Task and todo generation
+- Risk assessment and recommendations
+- Contributor and team dynamics insights
+
+### Alert System
+Automatically detects and alerts for:
+- Stale pull requests
+- Inactive branches
+- Blockers in communication
+- High work-in-progress load
+- Dependency risks
+- Collaboration issues
+
+### Workspace Management
+- Multi-workspace support
+- Role-based access control
+- Secure invite system
+- Contributor management
+
+---
+
+## Dashboard Modules
+
+- Overview Dashboard
+- Commits Tracking
+- Pull Request Monitoring
+- Issue Management
+- Alert Center
+- Knowledge Graph (Bus Factor)
+- Team Health Analysis
+- Communication Center
+- AI Insights and Todo Generation
+- Workspace Settings
+
+---
+
+## Tech Stack
+
+### Frontend
+- Next.js 15
+- React 19
+- TypeScript
+- Tailwind CSS
+- Radix UI
+- shadcn/ui
+- Chart.js and Recharts
+- Framer Motion
+
+### Backend
+- Next.js API Routes
+- Supabase (PostgreSQL)
+- JWT Authentication
+- GitHub OAuth
+- Groq API (LLaMA 3.3 70B)
+
+### Integrations
+- GitHub Webhooks
+
+### Testing
+- Vitest
+- Testing Library
+- Coverage Reporting
+
+---
+
+## Architecture Overview
+
+The system follows a full-stack architecture where the frontend dashboard communicates with backend API routes that process GitHub webhook events, analyze commits, run NLP on communication messages, and generate AI insights.
+
+The backend stores structured project data in PostgreSQL and continuously updates metrics, alerts, and health scores in real time.
+
+---
+
+## Security
+
+- Secure authentication using JWT
+- OAuth integration with GitHub
+- Webhook signature verification
+- Input validation using schema validation
+- Rate limiting on sensitive endpoints
+- Secure token-based workspace access
+
+---
+
+## Use Cases
+
+- Hackathon team monitoring
+- Capstone project management
+- Student development team coordination
+- Collaborative software project tracking
+- Engineering productivity analysis
+
+---
+
+## Environment Variables
+
+Create a `.env.local` file in the root directory and configure the following variables:
 ```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+NEXT_PUBLIC_SUPABASE_URL=
+NEXT_PUBLIC_SUPABASE_ANON_KEY=
+SUPABASE_SERVICE_ROLE_KEY=
+
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+
+DISCORD_CLIENT_ID=
+DISCORD_CLIENT_SECRET=
+
+JWT_SECRET=
+
+GROQ_API_KEY=
+
+WEBHOOK_SECRET=
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Project Structure
+```bash
+/app
+/components
+/lib
+/api
+/hooks
+/types
+/public
+/tests
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+```
+## Installation (Local Development)
+```bash
+git clone https://github.com/your-username/code-style-policeman.git
+cd code-style-policeman
+npm install
+npm run dev
+```
 
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
